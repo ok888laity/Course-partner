@@ -1,0 +1,17 @@
+import { readFile, mkdir, writeFile, cp } from 'node:fs/promises';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const mapping = {'/':['index.html','text/html; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8'],'/bridge.js':['bridge.js','application/javascript; charset=utf-8'],'/store.js':['store.js','application/javascript; charset=utf-8'],'/recorder.js':['recorder.js','application/javascript; charset=utf-8'],'/app.js':['app.js','application/javascript; charset=utf-8']};
+const assets = {};
+for (const [path,[file,type]] of Object.entries(mapping)) assets[path] = {body:await readFile(resolve(root,'web',file),'utf8'),type};
+const worker = 'const ASSETS = '+JSON.stringify(assets)+';\n'+await readFile(resolve(root,'worker/server.js'),'utf8');
+await mkdir(resolve(root,'dist/server'),{recursive:true});
+await mkdir(resolve(root,'dist/.openai'),{recursive:true});
+await writeFile(resolve(root,'dist/server/index.js'),worker);
+await cp(resolve(root,'.openai/hosting.json'),resolve(root,'dist/.openai/hosting.json'));
+const stats = Object.entries(assets).map(([path,v])=>({path,bytes:Buffer.byteLength(v.body),gzipBytes:gzipSync(v.body).length}));
+const output={version:'0.1.0',runtimeDependencies:0,totalClientBytes:stats.reduce((s,x)=>s+x.bytes,0),totalClientGzipBytes:stats.reduce((s,x)=>s+x.gzipBytes,0),assets:stats,workerBytes:Buffer.byteLength(worker)};
+await writeFile(resolve(root,'dist/build-report.json'),JSON.stringify(output,null,2));
+console.log(JSON.stringify(output));
