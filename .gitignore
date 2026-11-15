@@ -1,10 +1,6 @@
-dist/
-artifacts/
 .data/
-.env
-.env.*
-!.env.example
 node_modules/
 *.log
-.sites-*
-*.tmp
+.env
+.env.*
+artifacts/

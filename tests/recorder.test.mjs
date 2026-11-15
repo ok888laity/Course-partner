@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const source = await readFile(new URL('../web/recorder.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../local-only/recorder.js', import.meta.url), 'utf8');
 
 function environment({ getUserMedia, stopDelay = 0, failStop = false } = {}) {
   let milliseconds = 0;
