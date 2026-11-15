@@ -3,9 +3,9 @@
   let db;
   const request = r => new Promise((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
   async function tx(name, mode, work) {
-    if (!db) throw new Error('���ر�����δ׼����');
+    if (!db) throw new Error('本地保存尚未准备好');
     const t = db.transaction(name, mode);
-    const done = new Promise((resolve, reject) => { t.oncomplete = resolve; t.onabort = () => reject(t.error || new Error('���ر��汻�ж�')); t.onerror = () => reject(t.error || new Error('���ر���ʧ��')); });
+    const done = new Promise((resolve, reject) => { t.oncomplete = resolve; t.onabort = () => reject(t.error || new Error('本地保存被中断')); t.onerror = () => reject(t.error || new Error('本地保存失败')); });
     try { const result = await work(t.objectStore(name)); await done; return result; }
     catch (error) { await done.catch(() => {}); throw error; }
   }
@@ -14,15 +14,15 @@
   const all = store => tx(store, 'readonly', s => request(s.getAll()));
   const queueRecord = r => ({...r,id:['asset','transcript','create'].includes(r.type)?r.type+':'+(r.payload?.id||r.lessonId):r.id,queuedAt:r.queuedAt||Date.now()});
   async function persistAndQueue(store,value,record) {
-    if(!db)throw new Error('���ر�����δ׼����');
+    if(!db)throw new Error('本地保存尚未准备好');
     const t=db.transaction([store,'queue'],'readwrite');
-    const done=new Promise((resolve,reject)=>{t.oncomplete=resolve;t.onabort=()=>reject(t.error||new Error('���ر����ж�'));t.onerror=()=>reject(t.error||new Error('���ر���ʧ��'));});
+    const done=new Promise((resolve,reject)=>{t.oncomplete=resolve;t.onabort=()=>reject(t.error||new Error('本地保存中断'));t.onerror=()=>reject(t.error||new Error('本地保存失败'));});
     t.objectStore(store).put(value);t.objectStore('queue').put(queueRecord(record));
     await done;
   }
   window.TingkeStore = {
     async init(ownerId) {
-      if (!ownerId || !/^[a-f0-9]{64}$/.test(ownerId)) throw new Error('�޷�ȷ�ϱ������������˺�');
+      if (!ownerId || !/^[a-f0-9]{64}$/.test(ownerId)) throw new Error('无法确认本机资料所属账号');
       if (db) db.close();
       const open = indexedDB.open('tingke-pocket-' + ownerId, 1);
       open.onupgradeneeded = () => {

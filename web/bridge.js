@@ -4,7 +4,7 @@
   const pending = new Map();
   const prefix = 'tingke-' + Math.random().toString(36).slice(2) + '-';
   let counter = 0, connected = false, ready;
-  const timed = (promise,ms=60000) => new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('���ӳ�ʱ���ز����ڱ������ϴ�')),ms);Promise.resolve(promise).then(v=>{clearTimeout(timer);resolve(v);},e=>{clearTimeout(timer);reject(e);});});
+  const timed = (promise,ms=60000) => new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('连接超时，素材仍在本机待上传')),ms);Promise.resolve(promise).then(v=>{clearTimeout(timer);resolve(v);},e=>{clearTimeout(timer);reject(e);});});
   async function fetchSafe(url,options) {const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);try{return await fetch(url,{...options,signal:controller.signal});}finally{clearTimeout(timer);}}
   // Only our MCP resource sets this flag. A normal iframe may contain unrelated
   // host-injected window.openai metadata and must still use same-origin REST.
@@ -12,7 +12,7 @@
   function rpc(method, params, timeout = 20000) {
     return new Promise((resolve, reject) => {
       const id = prefix + (++counter);
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error('GPT ������ӳ�ʱ�����������������ҳ')); }, timeout);
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('GPT 插件连接超时，请在浏览器打开听课页')); }, timeout);
       pending.set(id, { resolve, reject, timer });
       window.parent.postMessage({ jsonrpc: '2.0', id, method, params }, '*');
     });
@@ -22,7 +22,7 @@
     const p = pending.get(event.data.id);
     if (!p) return;
     clearTimeout(p.timer); pending.delete(event.data.id);
-    if (event.data.error) p.reject(new Error(event.data.error.message || '�������ʧ��'));
+    if (event.data.error) p.reject(new Error(event.data.error.message || '插件调用失败'));
     else p.resolve(event.data.result);
   });
   async function connect() {
@@ -45,7 +45,7 @@
     let result;
     if (connected && !window.openai?.callTool) result = await rpc('tools/call', {name,arguments:args}, 60000);
     else result = await timed(window.openai.callTool(name, args));
-    if (result?.isError) throw new Error(result.content?.find(c => c.type === 'text')?.text || '�������ʧ��');
+    if (result?.isError) throw new Error(result.content?.find(c => c.type === 'text')?.text || '插件请求失败');
     if (result?.structuredContent) return result.structuredContent;
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) { try { return JSON.parse(text); } catch {} }
@@ -65,8 +65,8 @@
     async request(method, path, body) {
       if (embedded) return decodeResponse(await call('app_request', {method,path,body}));
       const r = await fetchSafe(path, {method, credentials:'same-origin', headers: body === undefined ? {} : {'Content-Type':'application/json'}, body:body === undefined ? undefined : JSON.stringify(body)});
-      const data = await r.json().catch(() => ({error: r.status === 401 ? '���ȵ�¼������' : '�����ݲ�����'}));
-      if (!r.ok) throw new Error(data.error || '����ʧ��');
+      const data = await r.json().catch(() => ({error: r.status === 401 ? '请先登录后重试' : '服务暂不可用'}));
+      if (!r.ok) throw new Error(data.error || '请求失败');
       return decodeResponse(data);
     },
     async upload(lessonId, asset) {
@@ -74,7 +74,7 @@
       if (embedded) return decodeResponse(await call('app_request',{method:'PUT',path:'/api/lessons/'+lessonId+'/assets/'+asset.id,body:{meta,base64:encode(new Uint8Array(await asset.blob.arrayBuffer()))}}));
       const encoded = encode(new TextEncoder().encode(JSON.stringify(meta)));
       const r = await fetchSafe('/api/lessons/'+lessonId+'/assets/'+asset.id,{method:'PUT',headers:{'Content-Type':asset.mime,'X-Tingke-Meta':encoded},body:asset.blob,credentials:'same-origin'});
-      const data = await r.json(); if (!r.ok) throw new Error(data.error || '�ϴ�δ�ɹ�'); return data;
+      const data = await r.json(); if (!r.ok) throw new Error(data.error || '上传未成功'); return data;
     },
     async media(lessonId, assetId) {
       if (embedded) {
@@ -83,7 +83,7 @@
         return new Blob([Uint8Array.from(atob(data.base64),c=>c.charCodeAt(0))],{type:data.mime});
       }
       const r = await fetchSafe('/api/media/'+lessonId+'/'+assetId,{credentials:'same-origin'});
-      if (!r.ok) throw new Error('��ʱ�޷���ȡ�ز�'); return r.blob();
+      if (!r.ok) throw new Error('暂时无法读取素材'); return r.blob();
     },
     async ask(prompt) {
       if (!embedded) return false;

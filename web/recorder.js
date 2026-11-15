@@ -42,18 +42,18 @@
       this._onVisibility = () => {
         if (global.document.visibilityState === 'visible' && this.state === 'recording') this._requestWakeLock();
         else if (global.document.visibilityState === 'hidden' && this.state === 'recording') {
-          this._report(namedError('ҳ���ѽ����̨���ֻ���������¼������ص�����ҳ���¼��״̬��', 'BACKGROUND_RESTRICTION'));
+          this._report(namedError('页面已进入后台，手机可能限制录音。请回到听课页检查录音状态。', 'BACKGROUND_RESTRICTION'));
         }
       };
     }
 
     async start() {
       if (this._starting || this.state === 'recording' || this.state === 'paused' || this.state === 'stopping') {
-        throw namedError('¼���Ѿ���ʼ��', 'ALREADY_RECORDING');
+        throw namedError('录音已经开始。', 'ALREADY_RECORDING');
       }
-      if (this.failedChunks.length) throw namedError('����δ�������ƵƬ�Σ����ȱ���򵼳����ٿ�ʼ��', 'UNSAVED_AUDIO');
+      if (this.failedChunks.length) throw namedError('还有未保存的音频片段，请先保存或导出后再开始。', 'UNSAVED_AUDIO');
       if (!global.navigator?.mediaDevices?.getUserMedia || typeof global.MediaRecorder !== 'function' || global.isSecureContext === false) {
-        const error = namedError('��ǰҳ���޷�ʹ����˷�¼�������ڰ�ȫ�������ҳ���д򿪲�������˷�Ȩ�ޡ�', 'RECORDING_UNAVAILABLE');
+        const error = namedError('当前页面无法使用麦克风录音。请在安全的浏览器页面中打开并允许麦克风权限。', 'RECORDING_UNAVAILABLE');
         this._report(error);
         throw error;
       }
@@ -70,7 +70,7 @@
         });
         if (generation !== this._startGeneration) {
           stream.getTracks().forEach(track => track.stop());
-          throw namedError('¼��������ȡ����', 'START_CANCELLED');
+          throw namedError('录音启动已取消。', 'START_CANCELLED');
         }
         this.stream = stream;
         const mime = MIME_TYPES.find(type => {
@@ -98,12 +98,12 @@
 
         recorder.addEventListener('dataavailable', event => this._acceptChunk(event));
         recorder.addEventListener('error', event => {
-          this._interrupt(namedError('¼���ܵ�ϵͳ�жϣ������ѱ������Ƶ�����¿�ʼ��', 'RECORDER_INTERRUPTED', event.error));
+          this._interrupt(namedError('录音受到系统中断，请检查已保存的音频并重新开始。', 'RECORDER_INTERRUPTED', event.error));
         });
         recorder.addEventListener('stop', () => {
           this._nativeStopSeen = true;
           if (!this._stopRequested) {
-            this._interruption = this._interruption || namedError('¼���ѱ�ϵͳֹͣ�����յ���Ƭ���Իᱣ�棬�����¿�ʼ¼����', 'UNEXPECTED_STOP');
+            this._interruption = this._interruption || namedError('录音已被系统停止。已收到的片段仍会保存，请重新开始录音。', 'UNEXPECTED_STOP');
             this._freezeClock();
             this._report(this._interruption);
           }
@@ -113,10 +113,10 @@
 
         for (const track of stream.getAudioTracks()) {
           const ended = () => {
-            if (!this._ended && !this._stopRequested) this._interrupt(namedError('��˷������ѽ�����¼�����жϡ�', 'MICROPHONE_ENDED'));
+            if (!this._ended && !this._stopRequested) this._interrupt(namedError('麦克风连接已结束，录音已中断。', 'MICROPHONE_ENDED'));
           };
           const muted = () => {
-            if (!this._ended && !this._stopRequested) this._report(namedError('��˷���ʱ��ϵͳ������¼������ȱ�������������������˷�Ȩ�ޡ�', 'MICROPHONE_MUTED'));
+            if (!this._ended && !this._stopRequested) this._report(namedError('麦克风暂时被系统静音，录音可能缺少声音。请检查来电或麦克风权限。', 'MICROPHONE_MUTED'));
           };
           track.addEventListener('ended', ended);
           track.addEventListener('mute', muted);
@@ -139,7 +139,7 @@
           this._setState('idle');
         }
         const error = cause.code ? cause : namedError(
-          cause.name === 'NotAllowedError' ? '��˷�Ȩ��δ���������������������������¼����' : '�޷�������˷�¼���������豸��Ȩ�ޡ�',
+          cause.name === 'NotAllowedError' ? '麦克风权限未获允许，请在浏览器设置中允许录音。' : '无法启动麦克风录音，请检查设备和权限。',
           'MICROPHONE_START_FAILED', cause,
         );
         if (error.code !== 'START_CANCELLED') this._report(error);
@@ -160,7 +160,7 @@
         this._setState('paused');
         this._releaseWakeLock();
         return true;
-      } catch (cause) { this._report(namedError('��ʱ�޷���ͣ¼����', 'PAUSE_FAILED', cause)); return false; }
+      } catch (cause) { this._report(namedError('暂时无法暂停录音。', 'PAUSE_FAILED', cause)); return false; }
     }
 
     resume() {
@@ -171,7 +171,7 @@
         this._setState('recording');
         this._requestWakeLock();
         return true;
-      } catch (cause) { this._report(namedError('�޷�����¼�������Ƚ��������汾��¼����', 'RESUME_FAILED', cause)); return false; }
+      } catch (cause) { this._report(namedError('无法继续录音，请先结束并保存本次录音。', 'RESUME_FAILED', cause)); return false; }
     }
 
     async stop() {
@@ -190,7 +190,7 @@
         // An inactive native recorder normally still owes dataavailable + stop.
         // _nativeStop is resolved only by that event, so no tail is skipped.
       } catch (cause) {
-        this._interruption = namedError('ϵͳû����������¼�������յ���Ƭ�λᱣ����������Ƶ��', 'STOP_FAILED', cause);
+        this._interruption = namedError('系统没有正常结束录音。已收到的片段会保留，请检查音频。', 'STOP_FAILED', cause);
         this._report(this._interruption);
         this._resolveNativeStop();
       }
@@ -247,7 +247,7 @@
         try { await this.options.onChunk?.(asset); }
         catch (cause) {
           this.failedChunks.push(asset);
-          const error = namedError('��ƵƬ����δ����ɹ���¼����ֹͣ�Ա�����¼���ݡ�����ر�ҳ�棬�����Ա��档', 'AUDIO_SAVE_FAILED', cause);
+          const error = namedError('音频片段尚未保存成功，录音已停止以保护已录内容。请勿关闭页面，可重试保存。', 'AUDIO_SAVE_FAILED', cause);
           this._interrupt(error);
         }
       });
@@ -273,7 +273,7 @@
         await this._cleanup();
         this._setState(this._interruption ? 'interrupted' : 'stopped');
         if (this.failedChunks.length) {
-          throw namedError(this.failedChunks.length + ' ����ƵƬ����δ���棬�뱣����ҳ�����ԡ�', 'UNSAVED_AUDIO');
+          throw namedError(this.failedChunks.length + ' 个音频片段仍未保存，请保留本页并重试。', 'UNSAVED_AUDIO');
         }
         if (this._interruption?.code === 'STOP_FAILED') throw this._interruption;
         return this._summary();
